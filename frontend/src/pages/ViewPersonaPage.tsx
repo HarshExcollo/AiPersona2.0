@@ -19,11 +19,16 @@ interface ViewPersonaPageProps {
   persona?: Persona;
 }
 
-interface Trait {
+interface PersonaTraits {
   _id: string;
-  title: string;
-  category: string;
-  description: string;
+  personaId: string;
+  about: string;
+  coreExpertise: string[];
+  communicationStyle: string;
+  traits: string[];
+  painPoints: string[];
+  keyResponsibilities: string[];
+  timestamp: string;
 }
 
 interface PersonaData {
@@ -31,7 +36,7 @@ interface PersonaData {
   name: string;
   role: string;
   avatar: string;
-  traits: Trait[];
+  traits: any[];
 }
 
 const mockPersona = {
@@ -141,23 +146,36 @@ const ViewPersonaPage: React.FC<ViewPersonaPageProps> = ({ persona: propPersona 
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [personaData, setPersonaData] = useState<PersonaData | null>(null);
+  const [personaTraits, setPersonaTraits] = useState<PersonaTraits | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPersonaData = async () => {
       try {
         setLoading(true);
+        
+        // Fetch persona traits from MongoDB
+        const traitsResponse = await fetch(`http://localhost:3000/api/personas/traits/${id || '1'}`);
+        
+        if (traitsResponse.ok) {
+          const traitsData = await traitsResponse.json();
+          if (traitsData.success && traitsData.traits) {
+            setPersonaTraits(traitsData.traits);
+          }
+        } else {
+          console.warn('Failed to fetch persona traits, using mock data');
+        }
+
+        // Fetch persona data (if you have an endpoint for this)
         const response = await fetch(`http://localhost:3000/api/personas/${id || '1'}`);
         
-        if (!response.ok) {
-          throw new Error('Failed to fetch persona data');
-        }
-        
-        const data = await response.json();
-        if (data.success && data.data) {
-          setPersonaData(data.data);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setPersonaData(data.data);
+          }
         } else {
-          throw new Error('Invalid response format');
+          console.warn('Failed to fetch persona data, using mock data');
         }
       } catch (err) {
         console.error('Error fetching persona:', err);
@@ -170,194 +188,34 @@ const ViewPersonaPage: React.FC<ViewPersonaPageProps> = ({ persona: propPersona 
     fetchPersonaData();
   }, [id]);
 
-  // Find trait by title
-  const getTraitByTitle = (title: string) => {
-    if (!personaData?.traits) return null;
-    return personaData.traits.find(trait => 
-      trait.title.toLowerCase() === title.toLowerCase()
-    );
-  };
-
-  // Get about section content
+  // Get about section content from MongoDB traits
   const getAboutContent = () => {
-    const aboutTrait = getTraitByTitle('About');
-    return aboutTrait?.description || mockPersona.about;
+    return personaTraits?.about || mockPersona.about;
   };
 
-  // Get communication style content
+  // Get communication style content from MongoDB traits
   const getCommunicationStyleContent = () => {
-    const communicationTrait = getTraitByTitle('Communication Style');
-    return communicationTrait?.description || mockPersona.communication;
+    return personaTraits?.communicationStyle || mockPersona.communication;
   };
 
-  // Get core expertise content
+  // Get core expertise content from MongoDB traits
   const getCoreExpertiseItems = () => {
-    const expertiseTrait = getTraitByTitle('Core Expertise');
-    if (!expertiseTrait?.description) return mockExpertise;
-    
-    // Check if the description contains numbered items like "1) text" or "1. text"
-    const numberedItemRegex = /^\d+[\s.)-]/;
-    const hasNumberedItems = numberedItemRegex.test(expertiseTrait.description);
-    
-    if (hasNumberedItems) {
-      // Split by new lines first for numbered lists
-      const items = expertiseTrait.description
-        .split('\n')
-        .map(item => item.trim())
-        .filter(item => item.length > 0)
-        // Remove the numbering from each item
-        .map(item => item.replace(/^\d+[\s.)-]/, '').trim());
-      
-      return items.length > 0 ? items : mockExpertise;
-    }
-    
-    // First try to split by bullet points
-    let bullets = expertiseTrait.description
-      .split('•')
-      .map(item => item.trim())
-      .filter(item => item.length > 0);
-    
-    // If no bullet points found, try splitting by new lines
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === expertiseTrait.description)) {
-      bullets = expertiseTrait.description
-        .split('\n')
-        .map(item => item.trim())
-        .filter(item => item.length > 0);
-    }
-    
-    // If still no items found, try splitting by periods followed by space or newline
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === expertiseTrait.description)) {
-      bullets = expertiseTrait.description
-        .split(/\.\s|\.\n/)
-        .map(item => item.trim())
-        .filter(item => item.length > 0)
-        .map(item => item + (item.endsWith('.') ? '' : '.'));
-    }
-    
-    // Clean up any remaining numbered list prefixes
-    bullets = bullets.map(item => item.replace(/^\d+[\s.)-]/, '').trim());
-    
-    return bullets.length > 0 ? bullets : mockExpertise;
+    return personaTraits?.coreExpertise || mockExpertise;
   };
 
-  // Get traits content
+  // Get traits content from MongoDB traits
   const getTraitsItems = () => {
-    const traitsTrait = getTraitByTitle('Traits');
-    if (!traitsTrait?.description) return mockTraits;
-    
-    // First try to split by bullet points
-    let bullets = traitsTrait.description
-      .split('•')
-      .map(item => item.trim())
-      .filter(item => item.length > 0);
-    
-    // If no bullet points found, try splitting by new lines
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === traitsTrait.description)) {
-      bullets = traitsTrait.description
-        .split('\n')
-        .map(item => item.trim())
-        .filter(item => item.length > 0);
-    }
-    
-    // If still no items found, try splitting by numbered list format (1), 2), etc.)
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === traitsTrait.description)) {
-      // Match patterns like "1)", "2)", "3)..." with any amount of spacing
-      const numberedListRegex = /\d+\s*\)/g;
-      const matches = traitsTrait.description.match(numberedListRegex);
-      
-      if (matches && matches.length > 0) {
-        // Split by numbered list markers
-        bullets = traitsTrait.description
-          .split(numberedListRegex)
-          .map(item => item.trim())
-          .filter(item => item.length > 0);
-      }
-    }
-    
-    // Clean up any remaining numbered list prefixes
-    bullets = bullets.map(item => item.replace(/^\d+[\s.)-]/, '').trim());
-    
-    return bullets.length > 0 ? bullets : mockTraits;
+    return personaTraits?.traits || mockTraits;
   };
 
-  // Get pain points content
+  // Get pain points content from MongoDB traits
   const getPainPointsItems = () => {
-    const painPointsTrait = getTraitByTitle('Pain Points');
-    if (!painPointsTrait?.description) return mockPainPoints;
-    
-    // First try to split by bullet points
-    let bullets = painPointsTrait.description
-      .split('•')
-      .map(item => item.trim())
-      .filter(item => item.length > 0);
-    
-    // If no bullet points found, try splitting by new lines
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === painPointsTrait.description)) {
-      bullets = painPointsTrait.description
-        .split('\n')
-        .map(item => item.trim())
-        .filter(item => item.length > 0);
-    }
-    
-    // If still no items found, try splitting by numbered list format (1), 2), etc.)
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === painPointsTrait.description)) {
-      // Match patterns like "1)", "2)", "3)..." with any amount of spacing
-      const numberedListRegex = /\d+\s*\)/g;
-      const matches = painPointsTrait.description.match(numberedListRegex);
-      
-      if (matches && matches.length > 0) {
-        // Split by numbered list markers
-        bullets = painPointsTrait.description
-          .split(numberedListRegex)
-          .map(item => item.trim())
-          .filter(item => item.length > 0);
-      }
-    }
-    
-    // Clean up any remaining numbered list prefixes
-    bullets = bullets.map(item => item.replace(/^\d+[\s.)-]/, '').trim());
-    
-    return bullets.length > 0 ? bullets : mockPainPoints;
+    return personaTraits?.painPoints || mockPainPoints;
   };
 
-  // Get key responsibilities content
+  // Get key responsibilities content from MongoDB traits
   const getKeyResponsibilitiesItems = () => {
-    const responsibilitiesTrait = getTraitByTitle('Key Responsibilities');
-    if (!responsibilitiesTrait?.description) return mockResponsibilities;
-    
-    // First try to split by bullet points
-    let bullets = responsibilitiesTrait.description
-      .split('•')
-      .map(item => item.trim())
-      .filter(item => item.length > 0);
-    
-    // If no bullet points found, try splitting by new lines
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === responsibilitiesTrait.description)) {
-      bullets = responsibilitiesTrait.description
-        .split('\n')
-        .map(item => item.trim())
-        .filter(item => item.length > 0);
-    }
-    
-    // If still no items found, try splitting by numbered list format (1), 2), etc.)
-    if (bullets.length === 0 || (bullets.length === 1 && bullets[0] === responsibilitiesTrait.description)) {
-      // Match patterns like "1)", "2)", "3)..." with any amount of spacing
-      const numberedListRegex = /\d+\s*\)/g;
-      const matches = responsibilitiesTrait.description.match(numberedListRegex);
-      
-      if (matches && matches.length > 0) {
-        // Split by numbered list markers
-        bullets = responsibilitiesTrait.description
-          .split(numberedListRegex)
-          .map(item => item.trim())
-          .filter(item => item.length > 0);
-      }
-    }
-    
-    // Clean up any remaining numbered list prefixes
-    bullets = bullets.map(item => item.replace(/^\d+[\s.)-]/, '').trim());
-    
-    return bullets.length > 0 ? bullets : mockResponsibilities;
+    return personaTraits?.keyResponsibilities || mockResponsibilities;
   };
 
   if (loading) {
